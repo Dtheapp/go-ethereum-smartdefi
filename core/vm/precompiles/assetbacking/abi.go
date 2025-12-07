@@ -3,6 +3,7 @@ package assetbacking
 
 import (
 	"bytes"
+	"errors"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -129,6 +130,10 @@ func DecodeGetFloorPriceInput(input []byte) (common.Address, error) {
 
 // EncodeOutput encodes function output
 func EncodeOutput(method string, output interface{}) ([]byte, error) {
-	return precompileABI.Pack(method, output)
+	methodObj, ok := precompileABI.Methods[method]
+	if !ok {
+		return nil, errors.New("method not found")
+	}
+	return methodObj.Outputs.Pack(output)
 }
 

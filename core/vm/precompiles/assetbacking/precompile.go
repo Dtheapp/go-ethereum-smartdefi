@@ -84,6 +84,8 @@ type BackingInfo struct {
 // Precompile implements the asset backing precompile
 type Precompile struct {
 	stateDB StateDB
+	caller  common.Address // For testing - caller address
+	value   *big.Int       // For testing - call value
 }
 
 // NewPrecompile creates a new asset backing precompile instance
@@ -96,6 +98,16 @@ func NewPrecompile(stateDB StateDB) *Precompile {
 // SetStateDB sets the state database for the precompile
 func (p *Precompile) SetStateDB(stateDB StateDB) {
 	p.stateDB = stateDB
+}
+
+// SetCaller sets the caller address (for testing)
+func (p *Precompile) SetCaller(caller common.Address) {
+	p.caller = caller
+}
+
+// SetValue sets the call value (for testing)
+func (p *Precompile) SetValue(value *big.Int) {
+	p.value = value
 }
 
 // Name returns the precompile name
@@ -140,15 +152,24 @@ func (p *Precompile) Run(input []byte) ([]byte, error) {
 	
 	// For now, we'll need caller and value from EVM context
 	// This is a simplified version - full implementation needs EVM modification
+	// Get caller and value (use stored values if available, otherwise zero)
+	caller := p.caller
+	if caller == (common.Address{}) {
+		// In production, caller will be set by EVM via SetCaller before Run
+		// For now, we'll use zero address which will cause some operations to fail
+		caller = common.Address{}
+	}
+	value := p.value
+	if value == nil {
+		value = big.NewInt(0)
+	}
+	
 	switch {
 	case common.BytesToHash(methodID) == common.BytesToHash(MethodIDCreateToken):
-		// TODO: Get caller from EVM context
-		caller := common.Address{} // Will be set by EVM
-		return p.createAssetBackedToken(input[4:], caller, big.NewInt(0), false)
+		return p.createAssetBackedToken(input[4:], caller, value, false)
 	case common.BytesToHash(methodID) == common.BytesToHash(MethodIDGetBacking):
 		return p.getBacking(input[4:], true)
 	case common.BytesToHash(methodID) == common.BytesToHash(MethodIDBurnAndRecover):
-		caller := common.Address{} // Will be set by EVM
 		return p.burnAndRecover(input[4:], caller, false)
 	case common.BytesToHash(methodID) == common.BytesToHash(MethodIDGetFloorPrice):
 		return p.getFloorPrice(input[4:], true)
