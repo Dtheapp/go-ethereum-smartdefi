@@ -184,6 +184,11 @@ func (p *Precompile) createAssetBackedToken(input []byte, caller common.Address,
 		return nil, ErrExecutionReverted
 	}
 	
+	// Check caller is not zero (required for token creation)
+	if caller == (common.Address{}) {
+		return nil, ErrExecutionReverted
+	}
+	
 	// Decode TokenConfig from input
 	config, err := DecodeCreateTokenInput(input)
 	if err != nil {
@@ -199,6 +204,14 @@ func (p *Precompile) createAssetBackedToken(input []byte, caller common.Address,
 	// BackingAsset must be address(0) for native Smart coin
 	if config.BackingAsset != (common.Address{}) {
 		return nil, ErrExecutionReverted // Only Smart coin supported
+	}
+	
+	// Check caller has sufficient balance for initial backing
+	if config.InitialBacking.Cmp(big.NewInt(0)) > 0 {
+		callerBalance := p.stateDB.GetBalance(caller)
+		if callerBalance.Cmp(config.InitialBacking) < 0 {
+			return nil, ErrExecutionReverted // Insufficient balance
+		}
 	}
 	
 	// Create deterministic token address (CREATE2-like)
@@ -248,7 +261,7 @@ func (p *Precompile) createAssetBackedToken(input []byte, caller common.Address,
 	storeFeeStructure(p.stateDB, tokenAddress, config.Fees, config.OnlySB)
 	
 	// Return token address (ABI encoded)
-	return tokenAddress.Bytes(), nil
+	return EncodeOutput("createAssetBackedToken", tokenAddress)
 }
 
 // validateTokenConfig validates the token configuration
@@ -306,7 +319,7 @@ func getFeeSlotBase(tokenAddress common.Address) int64 {
 
 // getBacking returns the backing information for a given token and amount
 func (p *Precompile) getBacking(input []byte, readOnly bool) ([]byte, error) {
-	// Decode input
+	// Decode input using the existing helper
 	token, amount, err := DecodeGetBackingInput(input)
 	if err != nil {
 		return nil, ErrExecutionReverted

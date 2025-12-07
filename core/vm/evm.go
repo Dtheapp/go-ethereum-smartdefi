@@ -285,7 +285,8 @@ func (evm *EVM) Call(caller common.Address, addr common.Address, input []byte, g
 	if isPrecompile {
 		// Use stateful version for SmartDeFi precompile (0x0000000000000000000000000000000000000100)
 		if addr == common.HexToAddress("0x0000000000000000000000000000000000000100") {
-			ret, gas, err = RunPrecompiledContractWithState(p, input, gas, evm.StateDB, evm.Config.Tracer)
+			// Pass caller and value context for SmartDeFi precompile
+			ret, gas, err = RunPrecompiledContractWithStateAndCaller(p, input, gas, evm.StateDB, caller, value.ToBig(), evm.Config.Tracer)
 		} else {
 			ret, gas, err = RunPrecompiledContract(p, input, gas, evm.Config.Tracer)
 		}

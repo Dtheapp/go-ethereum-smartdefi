@@ -48,8 +48,16 @@ func GetBackingPool(stateDB StateDBInterface, tokenAddress common.Address) *Back
 	slotBase := getSlotBase(tokenAddress)
 	
 	// Read state from slots
-	totalBacking := stateDB.GetState(tokenAddress, common.BigToHash(big.NewInt(slotBase+SlotTotalBacking))).Big()
-	totalSupply := stateDB.GetState(tokenAddress, common.BigToHash(big.NewInt(slotBase+SlotTotalSupply))).Big()
+	totalBackingHash := stateDB.GetState(tokenAddress, common.BigToHash(big.NewInt(slotBase+SlotTotalBacking)))
+	totalSupplyHash := stateDB.GetState(tokenAddress, common.BigToHash(big.NewInt(slotBase+SlotTotalSupply)))
+	
+	// Check if pool exists (if both are zero, pool doesn't exist)
+	if totalBackingHash == (common.Hash{}) && totalSupplyHash == (common.Hash{}) {
+		return nil
+	}
+	
+	totalBacking := totalBackingHash.Big()
+	totalSupply := totalSupplyHash.Big()
 	burnedSupply := stateDB.GetState(tokenAddress, common.BigToHash(big.NewInt(slotBase+SlotBurnedSupply))).Big()
 	backingAssetBytes := stateDB.GetState(tokenAddress, common.BigToHash(big.NewInt(slotBase+SlotBackingAsset))).Bytes()
 	backingAsset := common.BytesToAddress(backingAssetBytes[12:])

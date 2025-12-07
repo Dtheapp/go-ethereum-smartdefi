@@ -79,11 +79,16 @@ func EncodeCreateToken(config TokenConfig) ([]byte, error) {
 	return precompileABI.Pack("createAssetBackedToken", config)
 }
 
-// DecodeCreateTokenInput decodes the createAssetBackedToken input
+// DecodeCreateTokenInput decodes the createAssetBackedToken input (parameters only, no method ID)
 func DecodeCreateTokenInput(input []byte) (TokenConfig, error) {
 	var config TokenConfig
-	err := precompileABI.UnpackIntoInterface(&config, "createAssetBackedToken", input)
-	return config, err
+	method := precompileABI.Methods["createAssetBackedToken"]
+	values, err := method.Inputs.Unpack(input)
+	if err != nil {
+		return config, err
+	}
+	// Unpack the tuple into the struct
+	return config, method.Inputs.Copy(&config, values)
 }
 
 // EncodeGetBacking encodes the getBacking call
@@ -91,14 +96,22 @@ func EncodeGetBacking(token common.Address, amount *big.Int) ([]byte, error) {
 	return precompileABI.Pack("getBacking", token, amount)
 }
 
-// DecodeGetBackingInput decodes the getBacking input
+// DecodeGetBackingInput decodes the getBacking input (parameters only, no method ID)
 func DecodeGetBackingInput(input []byte) (common.Address, *big.Int, error) {
-	var results struct {
-		Token  common.Address
-		Amount *big.Int
+	method := precompileABI.Methods["getBacking"]
+	values, err := method.Inputs.Unpack(input)
+	if err != nil {
+		return common.Address{}, nil, err
 	}
-	err := precompileABI.UnpackIntoInterface(&results, "getBacking", input)
-	return results.Token, results.Amount, err
+	if len(values) < 2 {
+		return common.Address{}, nil, errors.New("insufficient values")
+	}
+	token, ok1 := values[0].(common.Address)
+	amount, ok2 := values[1].(*big.Int)
+	if !ok1 || !ok2 {
+		return common.Address{}, nil, errors.New("type assertion failed")
+	}
+	return token, amount, nil
 }
 
 // EncodeBurnAndRecover encodes the burnAndRecover call
@@ -106,14 +119,22 @@ func EncodeBurnAndRecover(token common.Address, amount *big.Int) ([]byte, error)
 	return precompileABI.Pack("burnAndRecover", token, amount)
 }
 
-// DecodeBurnAndRecoverInput decodes the burnAndRecover input
+// DecodeBurnAndRecoverInput decodes the burnAndRecover input (parameters only, no method ID)
 func DecodeBurnAndRecoverInput(input []byte) (common.Address, *big.Int, error) {
-	var results struct {
-		Token  common.Address
-		Amount *big.Int
+	method := precompileABI.Methods["burnAndRecover"]
+	values, err := method.Inputs.Unpack(input)
+	if err != nil {
+		return common.Address{}, nil, err
 	}
-	err := precompileABI.UnpackIntoInterface(&results, "burnAndRecover", input)
-	return results.Token, results.Amount, err
+	if len(values) < 2 {
+		return common.Address{}, nil, errors.New("insufficient values")
+	}
+	token, ok1 := values[0].(common.Address)
+	amount, ok2 := values[1].(*big.Int)
+	if !ok1 || !ok2 {
+		return common.Address{}, nil, errors.New("type assertion failed")
+	}
+	return token, amount, nil
 }
 
 // EncodeGetFloorPrice encodes the getFloorPrice call
@@ -121,11 +142,21 @@ func EncodeGetFloorPrice(token common.Address) ([]byte, error) {
 	return precompileABI.Pack("getFloorPrice", token)
 }
 
-// DecodeGetFloorPriceInput decodes the getFloorPrice input
+// DecodeGetFloorPriceInput decodes the getFloorPrice input (parameters only, no method ID)
 func DecodeGetFloorPriceInput(input []byte) (common.Address, error) {
-	var token common.Address
-	err := precompileABI.UnpackIntoInterface(&token, "getFloorPrice", input)
-	return token, err
+	method := precompileABI.Methods["getFloorPrice"]
+	values, err := method.Inputs.Unpack(input)
+	if err != nil {
+		return common.Address{}, err
+	}
+	if len(values) < 1 {
+		return common.Address{}, errors.New("insufficient values")
+	}
+	token, ok := values[0].(common.Address)
+	if !ok {
+		return common.Address{}, errors.New("type assertion failed")
+	}
+	return token, nil
 }
 
 // EncodeOutput encodes function output

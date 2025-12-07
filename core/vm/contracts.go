@@ -295,6 +295,24 @@ func RunPrecompiledContractWithState(p PrecompiledContract, input []byte, suppli
 	return RunPrecompiledContract(p, input, suppliedGas, logger)
 }
 
+// RunPrecompiledContractWithStateAndCaller runs a precompiled contract with StateDB and caller context
+// This is used for stateful precompiles that need caller information
+func RunPrecompiledContractWithStateAndCaller(p PrecompiledContract, input []byte, suppliedGas uint64, stateDB StateDB, caller common.Address, value *big.Int, logger *tracing.Hooks) (ret []byte, remainingGas uint64, err error) {
+	// Check if precompile supports StateDB (for stateful precompiles)
+	if stateful, ok := p.(interface{ SetStateDB(StateDB) }); ok {
+		stateful.SetStateDB(stateDB)
+	}
+	// Check if precompile supports SetCaller (for precompiles that need caller context)
+	if callable, ok := p.(interface{ SetCaller(common.Address) }); ok {
+		callable.SetCaller(caller)
+	}
+	// Check if precompile supports SetValue (for precompiles that need value context)
+	if valuable, ok := p.(interface{ SetValue(*big.Int) }); ok {
+		valuable.SetValue(value)
+	}
+	return RunPrecompiledContract(p, input, suppliedGas, logger)
+}
+
 // ecrecover implemented as a native contract.
 type ecrecover struct{}
 
