@@ -283,7 +283,12 @@ func (evm *EVM) Call(caller common.Address, addr common.Address, input []byte, g
 	evm.Context.Transfer(evm.StateDB, caller, addr, value)
 
 	if isPrecompile {
-		ret, gas, err = RunPrecompiledContract(p, input, gas, evm.Config.Tracer)
+		// Use stateful version for SmartDeFi precompile (0x0000000000000000000000000000000000000100)
+		if addr == common.HexToAddress("0x0000000000000000000000000000000000000100") {
+			ret, gas, err = RunPrecompiledContractWithState(p, input, gas, evm.StateDB, evm.Config.Tracer)
+		} else {
+			ret, gas, err = RunPrecompiledContract(p, input, gas, evm.Config.Tracer)
+		}
 	} else {
 		// Initialise a new contract and set the code that is to be used by the EVM.
 		code := evm.resolveCode(addr)

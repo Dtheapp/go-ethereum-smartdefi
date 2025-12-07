@@ -34,6 +34,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/bitutil"
 	"github.com/ethereum/go-ethereum/core/tracing"
+	"github.com/ethereum/go-ethereum/core/vm/precompiles/assetbacking"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/blake2b"
 	"github.com/ethereum/go-ethereum/crypto/bn256"
@@ -119,6 +120,10 @@ var PrecompiledContractsCancun = PrecompiledContracts{
 	common.BytesToAddress([]byte{0x8}): &bn256PairingIstanbul{},
 	common.BytesToAddress([]byte{0x9}): &blake2F{},
 	common.BytesToAddress([]byte{0xa}): &kzgPointEvaluation{},
+
+	// SmartDeFi Asset Backing Precompile
+	// Address: 0x0000000000000000000000000000000000000100
+	common.HexToAddress("0x0000000000000000000000000000000000000100"): &assetbacking.Precompile{},
 }
 
 // PrecompiledContractsPrague contains the set of pre-compiled Ethereum
@@ -169,6 +174,10 @@ var PrecompiledContractsOsaka = PrecompiledContracts{
 	common.BytesToAddress([]byte{0x11}): &bls12381MapG2{},
 
 	common.BytesToAddress([]byte{0x1, 0x00}): &p256Verify{},
+
+	// SmartDeFi Asset Backing Precompile
+	// Address: 0x0000000000000000000000000000000000000100
+	common.HexToAddress("0x0000000000000000000000000000000000000100"): &assetbacking.Precompile{},
 }
 
 // PrecompiledContractsP256Verify contains the precompiled Ethereum
@@ -273,6 +282,26 @@ func RunPrecompiledContract(p PrecompiledContract, input []byte, suppliedGas uin
 	suppliedGas -= gasCost
 	output, err := p.Run(input)
 	return output, suppliedGas, err
+}
+
+// RunPrecompiledContractWithState runs a precompiled contract with StateDB access
+// This is used for stateful precompiles like SmartDeFi Asset Backing
+func RunPrecompiledContractWithState(p PrecompiledContract, input []byte, suppliedGas uint64, stateDB StateDB, logger *tracing.Hooks) (ret []byte, remainingGas uint64, err error) {
+	// Check if precompile supports StateDB (for stateful precompiles)
+	if stateful, ok := p.(interface{ SetStateDB(StateDB) }); ok {
+		stateful.SetStateDB(stateDB)
+	}
+	return RunPrecompiledContract(p, input, suppliedGas, logger)
+}
+
+// RunPrecompiledContractWithState runs a precompiled contract with StateDB access
+// This is used for stateful precompiles like SmartDeFi
+func RunPrecompiledContractWithState(p PrecompiledContract, input []byte, suppliedGas uint64, stateDB StateDB, logger *tracing.Hooks) (ret []byte, remainingGas uint64, err error) {
+	// Check if precompile supports StateDB
+	if stateful, ok := p.(interface{ SetStateDB(StateDB) }); ok {
+		stateful.SetStateDB(stateDB)
+	}
+	return RunPrecompiledContract(p, input, suppliedGas, logger)
 }
 
 // ecrecover implemented as a native contract.
