@@ -2,13 +2,7 @@
 package assetbacking
 
 import (
-	"math/big"
-
-	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/common"
-)
-
-import (
+	"bytes"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -73,7 +67,7 @@ var (
 
 func init() {
 	var err error
-	precompileABI, err = abi.JSON([]byte(PrecompileABI))
+	precompileABI, err = abi.JSON(bytes.NewReader([]byte(PrecompileABI)))
 	if err != nil {
 		panic(err)
 	}

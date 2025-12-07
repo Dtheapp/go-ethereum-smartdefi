@@ -5,7 +5,7 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/crypto"
 )
 
 const (
@@ -35,8 +35,14 @@ type BackingPool struct {
 	BackingAmounts  []*big.Int
 }
 
+// StateDBInterface defines the interface needed for backing pool operations
+type StateDBInterface interface {
+	GetState(common.Address, common.Hash) common.Hash
+	SetState(common.Address, common.Hash, common.Hash)
+}
+
 // GetBackingPool retrieves backing pool state from the state database
-func GetBackingPool(stateDB *state.StateDB, tokenAddress common.Address) *BackingPool {
+func GetBackingPool(stateDB StateDBInterface, tokenAddress common.Address) *BackingPool {
 	// Calculate storage slots for this token
 	// Using CREATE2-like deterministic slot calculation
 	slotBase := getSlotBase(tokenAddress)
@@ -60,7 +66,7 @@ func GetBackingPool(stateDB *state.StateDB, tokenAddress common.Address) *Backin
 }
 
 // SetBackingPool writes backing pool state to the state database
-func SetBackingPool(stateDB *state.StateDB, pool *BackingPool) {
+func SetBackingPool(stateDB StateDBInterface, pool *BackingPool) {
 	slotBase := getSlotBase(pool.TokenAddress)
 	
 	// Write state to slots
@@ -136,7 +142,7 @@ func (p *BackingPool) BurnTokens(amount *big.Int) {
 func getSlotBase(tokenAddress common.Address) int64 {
 	// Use token address to deterministically calculate slot base
 	// This ensures each token has unique storage slots
-	hash := common.Keccak256Hash(tokenAddress.Bytes(), []byte("SmartDeFi-BackingPool"))
+	hash := crypto.Keccak256Hash(tokenAddress.Bytes(), []byte("SmartDeFi-BackingPool"))
 	return new(big.Int).Mod(hash.Big(), big.NewInt(1e10)).Int64()
 }
 

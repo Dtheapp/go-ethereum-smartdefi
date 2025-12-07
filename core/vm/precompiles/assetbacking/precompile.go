@@ -3,14 +3,35 @@
 package assetbacking
 
 import (
+	"errors"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	
 	"github.com/ethereum/go-ethereum/core/state/backingpool"
 )
+
+// ErrExecutionReverted is returned when execution reverts
+var ErrExecutionReverted = errors.New("execution reverted")
+
+// StateDB interface to avoid circular import with vm package
+type StateDB interface {
+	GetState(common.Address, common.Hash) common.Hash
+	SetState(common.Address, common.Hash, common.Hash)
+	GetBalance(common.Address) *big.Int
+	AddBalance(common.Address, *big.Int)
+	SubBalance(common.Address, *big.Int)
+	GetCodeSize(common.Address) int
+	GetNonce(common.Address) uint64
+}
+
+// PrecompiledContract interface (to avoid circular import)
+type PrecompiledContract interface {
+	RequiredGas(input []byte) uint64
+	Run(input []byte) ([]byte, error)
+	Name() string
+}
 
 const (
 	// PrecompileAddress is the address where this precompile is deployed
@@ -60,26 +81,20 @@ type BackingInfo struct {
 	BackingPerToken *big.Int
 }
 
-// StatefulPrecompile is an extended interface for precompiles that need StateDB access
-type StatefulPrecompile interface {
-	vm.PrecompiledContract
-	SetStateDB(stateDB vm.StateDB)
-}
-
 // Precompile implements the asset backing precompile
 type Precompile struct {
-	stateDB vm.StateDB
+	stateDB StateDB
 }
 
 // NewPrecompile creates a new asset backing precompile instance
-func NewPrecompile(stateDB vm.StateDB) *Precompile {
+func NewPrecompile(stateDB StateDB) *Precompile {
 	return &Precompile{
 		stateDB: stateDB,
 	}
 }
 
 // SetStateDB sets the state database for the precompile
-func (p *Precompile) SetStateDB(stateDB vm.StateDB) {
+func (p *Precompile) SetStateDB(stateDB StateDB) {
 	p.stateDB = stateDB
 }
 
@@ -114,11 +129,11 @@ func (p *Precompile) RequiredGas(input []byte) uint64 {
 // Run executes the precompile logic (implements PrecompiledContract interface)
 func (p *Precompile) Run(input []byte) ([]byte, error) {
 	if p.stateDB == nil {
-		return nil, vm.ErrExecutionReverted
+		return nil, ErrExecutionReverted
 	}
 	
 	if len(input) < 4 {
-		return nil, vm.ErrExecutionReverted
+		return nil, ErrExecutionReverted
 	}
 	
 	methodID := input[:4]
@@ -138,31 +153,31 @@ func (p *Precompile) Run(input []byte) ([]byte, error) {
 	case common.BytesToHash(methodID) == common.BytesToHash(MethodIDGetFloorPrice):
 		return p.getFloorPrice(input[4:], true)
 	default:
-		return nil, vm.ErrExecutionReverted
+		return nil, ErrExecutionReverted
 	}
 }
 
 // createAssetBackedToken creates a new asset-backed token natively on the chain
 func (p *Precompile) createAssetBackedToken(input []byte, caller common.Address, value *big.Int, readOnly bool) ([]byte, error) {
 	if readOnly {
-		return nil, vm.ErrExecutionReverted
+		return nil, ErrExecutionReverted
 	}
 	
 	// Decode TokenConfig from input
 	config, err := DecodeCreateTokenInput(input)
 	if err != nil {
-		return nil, vm.ErrExecutionReverted
+		return nil, ErrExecutionReverted
 	}
 	
 	// Validate configuration
 	if err := validateTokenConfig(config); err != nil {
-		return nil, vm.ErrExecutionReverted
+		return nil, ErrExecutionReverted
 	}
 	
 	// Enforce Smart coin as only backing asset
 	// BackingAsset must be address(0) for native Smart coin
 	if config.BackingAsset != (common.Address{}) {
-		return nil, vm.ErrExecutionReverted // Only Smart coin supported
+		return nil, ErrExecutionReverted // Only Smart coin supported
 	}
 	
 	// Create deterministic token address (CREATE2-like)
@@ -179,7 +194,7 @@ func (p *Precompile) createAssetBackedToken(input []byte, caller common.Address,
 	
 	// Check if token already exists
 	if p.stateDB.GetCodeSize(tokenAddress) > 0 {
-		return nil, vm.ErrExecutionReverted // Token already exists
+		return nil, ErrExecutionReverted // Token already exists
 	}
 	
 	// Initialize backing pool with Smart coin (native coin)
@@ -219,7 +234,7 @@ func (p *Precompile) createAssetBackedToken(input []byte, caller common.Address,
 func validateTokenConfig(config TokenConfig) error {
 	// Validate supply
 	if config.TotalSupply.Cmp(big.NewInt(0)) <= 0 {
-		return vm.ErrExecutionReverted
+		return ErrExecutionReverted
 	}
 	
 	// Validate fees (max 50% total)
@@ -231,19 +246,19 @@ func validateTokenConfig(config TokenConfig) error {
 	}
 	
 	if totalBuyFees.Cmp(big.NewInt(500)) > 0 || totalSellFees.Cmp(big.NewInt(500)) > 0 {
-		return vm.ErrExecutionReverted // Max 50% fees
+		return ErrExecutionReverted // Max 50% fees
 	}
 	
 	// Validate initial backing
 	if config.InitialBacking.Cmp(big.NewInt(0)) < 0 {
-		return vm.ErrExecutionReverted
+		return ErrExecutionReverted
 	}
 	
 	return nil
 }
 
 // storeFeeStructure stores the fee structure in state
-func storeFeeStructure(stateDB vm.StateDB, tokenAddress common.Address, fees [12]*big.Int, onlySB bool) {
+func storeFeeStructure(stateDB StateDB, tokenAddress common.Address, fees [12]*big.Int, onlySB bool) {
 	// Store fees in storage slots (simplified - actual implementation would use proper slot calculation)
 	slotBase := getFeeSlotBase(tokenAddress)
 	
@@ -273,13 +288,13 @@ func (p *Precompile) getBacking(input []byte, readOnly bool) ([]byte, error) {
 	// Decode input
 	token, amount, err := DecodeGetBackingInput(input)
 	if err != nil {
-		return nil, vm.ErrExecutionReverted
+		return nil, ErrExecutionReverted
 	}
 	
 	// Get backing pool state
 	pool := backingpool.GetBackingPool(p.stateDB, token)
 	if pool == nil {
-		return nil, vm.ErrExecutionReverted
+		return nil, ErrExecutionReverted
 	}
 	
 	// Calculate backing for amount
@@ -292,19 +307,19 @@ func (p *Precompile) getBacking(input []byte, readOnly bool) ([]byte, error) {
 // burnAndRecover burns tokens and recovers the backing assets
 func (p *Precompile) burnAndRecover(input []byte, caller common.Address, readOnly bool) ([]byte, error) {
 	if readOnly {
-		return nil, vm.ErrExecutionReverted
+		return nil, ErrExecutionReverted
 	}
 	
 	// Decode input
 	token, amount, err := DecodeBurnAndRecoverInput(input)
 	if err != nil {
-		return nil, vm.ErrExecutionReverted
+		return nil, ErrExecutionReverted
 	}
 	
 	// Get backing pool state
 	pool := backingpool.GetBackingPool(p.stateDB, token)
 	if pool == nil {
-		return nil, vm.ErrExecutionReverted
+		return nil, ErrExecutionReverted
 	}
 	
 	// Verify caller has tokens (simplified - actual implementation needs token balance check)
@@ -339,13 +354,13 @@ func (p *Precompile) getFloorPrice(input []byte, readOnly bool) ([]byte, error) 
 	// Decode input
 	token, err := DecodeGetFloorPriceInput(input)
 	if err != nil {
-		return nil, vm.ErrExecutionReverted
+		return nil, ErrExecutionReverted
 	}
 	
 	// Get backing pool state
 	pool := backingpool.GetBackingPool(p.stateDB, token)
 	if pool == nil {
-		return nil, vm.ErrExecutionReverted
+		return nil, ErrExecutionReverted
 	}
 	
 	// Calculate floor price

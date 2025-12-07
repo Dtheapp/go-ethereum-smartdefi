@@ -288,16 +288,7 @@ func RunPrecompiledContract(p PrecompiledContract, input []byte, suppliedGas uin
 // This is used for stateful precompiles like SmartDeFi Asset Backing
 func RunPrecompiledContractWithState(p PrecompiledContract, input []byte, suppliedGas uint64, stateDB StateDB, logger *tracing.Hooks) (ret []byte, remainingGas uint64, err error) {
 	// Check if precompile supports StateDB (for stateful precompiles)
-	if stateful, ok := p.(interface{ SetStateDB(StateDB) }); ok {
-		stateful.SetStateDB(stateDB)
-	}
-	return RunPrecompiledContract(p, input, suppliedGas, logger)
-}
-
-// RunPrecompiledContractWithState runs a precompiled contract with StateDB access
-// This is used for stateful precompiles like SmartDeFi
-func RunPrecompiledContractWithState(p PrecompiledContract, input []byte, suppliedGas uint64, stateDB StateDB, logger *tracing.Hooks) (ret []byte, remainingGas uint64, err error) {
-	// Check if precompile supports StateDB
+	// Use type assertion to check for SetStateDB method
 	if stateful, ok := p.(interface{ SetStateDB(StateDB) }); ok {
 		stateful.SetStateDB(stateDB)
 	}
